@@ -1,74 +1,121 @@
-package payments
+package pl.simpay.api.payments
 
-import com.google.gson.reflect.TypeToken
-import model.db.DbCommission
-import model.db.DbTransaction
-import model.db.DbTransactionLimit
-import model.db.request.*
-import model.db.response.DbGenerateResponse
-import model.db.response.DbServicesListResponse
-import model.generic.ApiResponse
-import model.generic.IPResponse
-import model.generic.ParametrizedRequest
-import okhttp3.FormBody
-import utils.*
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import pl.simpay.api.adapter.TransactionStatusAdapter
+import pl.simpay.api.model.directBilling.DirectBillingServiceDTO
+import pl.simpay.api.model.directBilling.commission.CommissionsValuesDTO
+import pl.simpay.api.model.directBilling.details.DirectBillingServiceDetailsDTO
+import pl.simpay.api.model.directBilling.transaction.DirectBillingGenerateTransactionDTO
+import pl.simpay.api.model.directBilling.transaction.DirectBillingTransactionDetailsDTO
+import pl.simpay.api.model.directBilling.transaction.DirectBillingTransactionNotificationDTO
+import pl.simpay.api.model.directBilling.transaction.DirectBillingTransactionsDTO
+import pl.simpay.api.model.request.GenerateTransactionRequest
+import pl.simpay.api.model.response.PaginatedResponse
+import pl.simpay.api.model.response.Response
+import pl.simpay.api.service.RestService
+import pl.simpay.api.util.hashToSha256
 
-private const val API_URL = "https://simpay.pl/db/api"
-private const val TRANSACTION_STATUS_URL = "https://simpay.pl/api/db_status"
-private const val SERVICES_LIST_URL = "https://simpay.pl/api/get_services_db"
-private const val TRANSACTION_LIMITS_URL = "https://simpay.pl/api/db_hosts"
-private const val SERVICE_COMMISSION_URL = "https://simpay.pl/api/db_hosts_commission"
-private const val GET_IP_URL = "https://simpay.pl/api/get_ip"
-private const val COMMA = ","
-private const val DOT = "."
+private const val DEFAULT_PAGE = 1
+private const val DEFAULT_LIMIT = 15
 
+class DirectBilling(private val restService: RestService) {
 
-class DirectBilling {
-
-    // https://docs.simpay.pl/#generowanie-transakcji
-    fun generateTransaction(apiKey: String, request: DbGenerateRequest): DbGenerateResponse {
-        val amount = request.amount ?: request.amount_gross ?: request.amount_required!!
-
-        val builder = FormBody.Builder()
-
-        request.sign =
-                (request.serviceId + amount.toDouble().formatTwoDigitAfterComma().replace(COMMA,
-                                                                                                  DOT) + request.control + apiKey).toSha256()
-        for (map in request.serialize()) {
-            println(map)
-            builder.add(map.key, map.value)
-        }
-
-        return sendFormPost(API_URL, builder.build(), DbGenerateResponse())
+    fun getServiceList(page: Int = DEFAULT_PAGE, limit: Int = DEFAULT_LIMIT): PaginatedResponse<Set<DirectBillingServiceDTO>>? {
+        val endpoint = "/directbilling?page=%d&limit=%d".format(page, limit)
+        val parameterizedType = Types.newParameterizedType(
+            PaginatedResponse::class.java,
+            Types.newParameterizedType(MutableSet::class.java, DirectBillingServiceDTO::class.java)
+        )
+        return restService.sendGetRequest(
+            endpoint,
+            parameterizedType
+        )
     }
 
-    // https://docs.simpay.pl/#pobieranie-danych-o-transakcji
-    fun getTransaction(request: DbTransactionRequest): ApiResponse<DbTransaction> {
-        return sendPost(TRANSACTION_STATUS_URL, ParametrizedRequest(request), ApiResponse())
+    fun getServiceDetails(serviceId: Int): Response<DirectBillingServiceDetailsDTO?>? {
+        val endpoint = "/directbilling/%d".format(serviceId)
+        val parameterizedType = Types.newParameterizedType(
+            Response::class.java,
+            DirectBillingServiceDetailsDTO::class.java
+        )
+        return restService.sendGetRequest(endpoint, parameterizedType) as Response<DirectBillingServiceDetailsDTO?>?
     }
 
-    fun getServices(request: DbServicesListRequest): ApiResponse<DbServicesListResponse> {
-        return sendPost(SERVICES_LIST_URL, ParametrizedRequest(request), ApiResponse())
+    fun calculateCommission(serviceId: Int, amount: Double): Response<CommissionsValuesDTO>? {
+        val endpoint = "/directbilling/%d/calculate?amount=%f".format(serviceId, amount)
+        val parameterizedType = Types.newParameterizedType(
+            Response::class.java,
+            CommissionsValuesDTO::class.java
+        )
+        return restService.sendGetRequest(endpoint, parameterizedType)
     }
 
-    // https://docs.simpay.pl/#pobieranie-maksymalnych-kwot-transakcji
-    fun getTransactionLimits(request: DbTransactionLimitsRequest): ApiResponse<List<DbTransactionLimit>> {
-        return sendPost(TRANSACTION_LIMITS_URL, ParametrizedRequest(request), ApiResponse())
+    fun getTransactions(
+        serviceId: Int,
+        page: Int = DEFAULT_PAGE,
+        limit: Int = DEFAULT_LIMIT
+    ): PaginatedResponse<Set<DirectBillingTransactionsDTO>>? {
+        val endpoint = "/directbilling/%d/transactions?page=%d&limit=%d".format(serviceId, page, limit)
+        val parameterizedType = Types.newParameterizedType(
+            PaginatedResponse::class.java, Types.newParameterizedType(
+                MutableSet::class.java,
+                DirectBillingTransactionsDTO::class.java
+            )
+        )
+        return restService.sendGetRequest(
+            endpoint,
+            parameterizedType
+        )
     }
 
-    // https://docs.simpay.pl/#lista-ip-serwerow-simpay
-    fun getServersIp(): List<String> {
-        val response: ApiResponse<IPResponse> = sendGet(GET_IP_URL, object : TypeToken<ApiResponse<IPResponse>>() {}.type)
-        return response.respond!!.ips
+    fun getTransactionDetails(serviceId: Int, transactionId: Int): Response<DirectBillingTransactionDetailsDTO>? {
+        val endpoint = "/directbilling/%d/transactions/%d".format(serviceId, transactionId)
+        val parameterizedType = Types.newParameterizedType(
+            Response::class.java,
+            DirectBillingTransactionDetailsDTO::class.java
+        )
+        return restService.sendGetRequest(endpoint, parameterizedType)
     }
 
-    // https://docs.simpay.pl/#pobieranie-prowizji-dla-uslugi
-    fun getServiceCommission(request: DbServiceCommissionRequest): ApiResponse<List<DbCommission>> {
-        return sendPost(SERVICE_COMMISSION_URL, ParametrizedRequest(request), ApiResponse())
+    fun generateTransaction(
+        serviceId: Int,
+        request: GenerateTransactionRequest
+    ): Response<DirectBillingGenerateTransactionDTO>? {
+        val endpoint = "/directbilling/%d/transactions".format(serviceId)
+        val parameterizedType = Types.newParameterizedType(
+            Response::class.java,
+            DirectBillingGenerateTransactionDTO::class.java
+        )
+        return restService.sendPostRequest(
+            endpoint, request, parameterizedType
+        )
     }
 
-    // https://docs.simpay.pl/#odbieranie-transakcji
-    fun sign(id: Int, status: String, valuenet: String, valuepartner: String, control: String, apiKey: String): String {
-        return (id.toString() + status + valuenet + valuepartner + control + apiKey).toSha256()
+    fun checkSignature(key: String, transactionJson: String): Boolean {
+        val moshi = Moshi.Builder().add(TransactionStatusAdapter()).build()
+        val transactionNotification =
+            moshi.adapter(DirectBillingTransactionNotificationDTO::class.java).fromJson(transactionJson)
+        return transactionNotification != null && generateSignature(
+            key,
+            transactionNotification
+        ) == transactionNotification.signature
+    }
+
+    private fun generateSignature(key: String, notification: DirectBillingTransactionNotificationDTO): String {
+        return listOf(
+            notification.id.toString(),
+            notification.status.statusName,
+            notification.values.net.toString(),
+            notification.values.gross.toString(),
+            notification.values.partner.toString(),
+            notification.returns.success,
+            notification.returns.failure,
+            notification.control,
+            notification.number,
+            notification.provider.toString(),
+            notification.signature,
+            key
+        ).joinToString("|").hashToSha256()
     }
 }

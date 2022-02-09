@@ -1,13 +1,9 @@
-package payments
+package pl.simpay.api.payments
 
-import model.generic.ApiResponse
-import model.generic.IPResponse
-import utils.normalizeToNFKD
-import utils.sendGet
-import utils.toSha256
-import kotlin.random.Random
+import pl.simpay.api.util.hashToSha256
+import java.text.Normalizer
+import java.util.concurrent.ThreadLocalRandom
 
-private const val GET_IP_URL = "https://simpay.pl/api/get_ip"
 private const val CHARSET = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"
 private const val SIGN = "sign"
 private const val SMS_ID = "sms_id"
@@ -15,36 +11,35 @@ private const val SMS_FROM = "sms_from"
 private const val SMS_TEXT = "sms_text"
 private const val SEND_NUMBER = "send_number"
 private const val SEND_TIME = "send_time"
-private const val ZERO = 0
 
-class SmsXml(private val apiKey: String) {
-    private var codes: MutableMap<String, Double> = mutableMapOf()
-    private val params = arrayOf("send_number", "sms_text", "sms_from", "sms_id", "sign")
+class SmsXml(private val hashingKey: String) {
 
-    init {
-        codes["7055"] = 0.25
-        codes["7136"] = 0.5
-        codes["7255"] = 1.0
-        codes["7355"] = 1.5
-        codes["7455"] = 2.0
-        codes["7555"] = 2.5
-        codes["7636"] = 3.0
-        codes["77464"] = 3.5
-        codes["78464"] = 4.0
-        codes["7936"] = 4.5
-        codes["91055"] = 5.0
-        codes["91155"] = 5.5
-        codes["91455"] = 7.0
-        codes["91664"] = 8.0
-        codes["91955"] = 9.5
-        codes["92055"] = 10.0
-        codes["92555"] = 12.5
+    private val codes: Map<String, Double> = object : HashMap<String, Double>() {
+        init {
+            put("7055", 0.25)
+            put("7136", 0.5)
+            put("7255", 1.0)
+            put("7355", 1.5)
+            put("7455", 2.0)
+            put("7555", 2.5)
+            put("7636", 3.0)
+            put("77464", 3.5)
+            put("78464", 4.0)
+            put("7936", 4.5)
+            put("91055", 5.0)
+            put("91155", 5.5)
+            put("91455", 7.0)
+            put("91664", 8.0)
+            put("91955", 9.5)
+            put("92055", 10.0)
+            put("92555", 12.5)
+        }
     }
 
-    // https://docs.simpay.pl/#odbieranie-informacji-o-sms
     fun checkParameters(map: Map<String, Any>): Boolean {
+        val params = listOf(SEND_NUMBER, SMS_TEXT, SMS_FROM, SMS_ID, SIGN)
         params.forEach {
-            if (map.containsKey(it)) {
+            if (it !in map) {
                 return false
             }
         }
@@ -52,34 +47,31 @@ class SmsXml(private val apiKey: String) {
         return map[SIGN] == sign(map)
     }
 
-    // https://docs.simpay.pl/#odbieranie-informacji-o-sms
     fun generateCode(): String {
         val length = 6
 
         val builder = StringBuilder()
 
-        for (i in ZERO..length) {
-            builder.append(CHARSET[Random.nextInt(ZERO, CHARSET.length)])
+        for (i in 0..length) {
+            builder.append(CHARSET[ThreadLocalRandom.current().nextInt(0, CHARSET.length)])
         }
         return builder.toString()
     }
 
-    // https://docs.simpay.pl/#odbieranie-informacji-o-sms
     fun getSmsValue(number: String): Double? {
         return codes[number]
     }
 
-    // https://docs.simpay.pl/#odbieranie-informacji-o-sms
     fun generateXml(text: String): String {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><sms-response>${text.normalizeToNFKD()}<sms-text></sms-text></sms-response>"
-    }
-
-    fun getServersIp(ip: String): List<String> {
-        val ipResponse :ApiResponse<IPResponse> = sendGet(GET_IP_URL, ApiResponse<IPResponse>())
-        return ipResponse.respond!!.ips
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><sms-response>${
+            Normalizer.normalize(
+                text,
+                Normalizer.Form.NFKD
+            )
+        }<sms-text></sms-text></sms-response>"
     }
 
     private fun sign(map: Map<String, Any>): String {
-        return "${map[SMS_ID].toString() + map[SMS_TEXT] + map[SMS_FROM] + map[SEND_NUMBER] + map[SEND_TIME]}$apiKey".toSha256()
+        return (map[SMS_ID].toString() + map[SMS_TEXT] + map[SMS_FROM] + map[SEND_NUMBER] + map[SEND_TIME] + hashingKey).hashToSha256()
     }
 }

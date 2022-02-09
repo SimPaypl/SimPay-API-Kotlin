@@ -1,32 +1,20 @@
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.3.72'
+    id 'org.jetbrains.kotlin.jvm' version '1.6.0'
 }
 
-group 'pl.simpay'
-version '1.0-SNAPSHOT'
-
-kotlin {
-    sourceSets {
-        main.kotlin.srcDirs += "src/main/kotlin/pl/simpay/api"
-    }
-}
+group 'pl.simpay.api'
+version '2.0'
 
 repositories {
     mavenCentral()
 }
 
-
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation "org.jetbrains.kotlin:kotlin-reflect:1.3.72"
-    compile group: 'com.google.code.gson', name: 'gson', version: '2.8.6'
-    compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
-    compile group: 'com.squareup.okhttp3', name: 'okhttp', version: '4.7.2'
-}
-
-compileKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "1.8"
+    implementation group: 'org.jetbrains.kotlin', name: 'kotlin-stdlib', version: '1.6.0'
+    implementation group: 'com.squareup.moshi', name: 'moshi-kotlin', version: '1.12.0'
+    implementation group: 'com.squareup.moshi', name: 'moshi', version: '1.12.0'
+    implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.32'
+    implementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.32'
+    implementation group: 'com.google.guava', name: 'guava', version: '31.0.1-jre'
+    implementation group: 'com.squareup.okhttp3', name: 'okhttp', version: '4.9.2'
 }
