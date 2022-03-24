@@ -69,8 +69,8 @@ class DirectBilling(private val restService: RestService) {
         )
     }
 
-    fun getTransactionDetails(serviceId: Int, transactionId: Int): Response<DirectBillingTransactionDetailsDTO>? {
-        val endpoint = "/directbilling/%d/transactions/%d".format(serviceId, transactionId)
+    fun getTransactionDetails(serviceId: Int, transactionId: String): Response<DirectBillingTransactionDetailsDTO>? {
+        val endpoint = "/directbilling/%d/transactions/%s".format(serviceId, transactionId)
         val parameterizedType = Types.newParameterizedType(
             Response::class.java,
             DirectBillingTransactionDetailsDTO::class.java
@@ -112,7 +112,7 @@ class DirectBilling(private val restService: RestService) {
             notification.returns.success,
             notification.returns.failure,
             notification.control,
-            notification.number,
+            notification.numberFrom,
             notification.provider.toString(),
             notification.signature,
             key

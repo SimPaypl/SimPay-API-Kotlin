@@ -4,7 +4,7 @@ import com.squareup.moshi.Json
 import java.time.LocalDateTime
 
 data class DirectBillingTransactionDetailsDTO(
-    val id: Int,
+    val id: String,
     val status: TransactionStatus,
     val phoneNumber: String?,
     val value: Double,
